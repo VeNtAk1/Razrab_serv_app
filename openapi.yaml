@@ -1,0 +1,188 @@
+openapi: 3.0.3
+info:
+  title: Digital Goods Marketplace API
+  description: Спецификация REST API для сервиса продажи цифровых товаров (Лабораторная работа №2)
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Локальный сервер разработки
+
+paths:
+  /auth/login:
+    post:
+      summary: Вход в систему
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "buyer@example.com"
+                password:
+                  type: string
+                  example: "securePassword123"
+      responses:
+        '200':
+          description: Успешный вход, возвращает JWT токен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '401':
+          description: Неверный логин или пароль
+
+  /products:
+    get:
+      summary: Получение списка товаров
+      tags:
+        - Products
+      parameters:
+        - name: category
+          in: query
+          description: Фильтр по категории
+          required: false
+          schema:
+            type: string
+            example: "ebooks"
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductResponse'
+    post:
+      summary: Загрузка нового товара (только для продавцов)
+      tags:
+        - Products
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Товар успешно создан
+        '400':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Доступ запрещен (не продавец)
+
+  /orders/{id}/download:
+    post:
+      summary: Получить одноразовую ссылку на скачивание
+      tags:
+        - Orders
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID заказа
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ссылка успешно сгенерирована
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  download_url:
+                    type: string
+                    format: uri
+                    example: "https://storage.example.com/file.pdf?token=abc123"
+                  expires_at:
+                    type: string
+                    format: date-time
+        '404':
+          description: Заказ не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: Срок действия ссылки истек или лимит скачиваний исчерпан
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CreateProductRequest:
+      type: object
+      required:
+        - title
+        - price
+      properties:
+        title:
+          type: string
+          example: "Шаблон для Figma"
+        description:
+          type: string
+          example: "Красивый UI-кит"
+        price:
+          type: number
+          format: float
+          example: 1500.00
+        file_key:
+          type: string
+          description: Ссылка на файл в S3
+          example: "uploads/figma-template.zip"
+
+    ProductResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        title:
+          type: string
+        price:
+          type: number
+        seller_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "ACTIVE"
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "INVALID_INPUT"
+        message:
+          type: string
+          example: "Поле 'price' должно быть больше нуля"
+        timestamp:
+          type: string
+          format: date-time
